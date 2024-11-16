@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,7 +14,6 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -103,8 +103,26 @@ func (ip_m *IP_Manager) addPeer(ip string, port int) {
 
 func (ip_m *IP_Manager) getPeerList(w http.ResponseWriter, r *http.Request) {
 	ip, _ := getIP(r.RemoteAddr)
+
+	var port struct {
+		Port int `json:"port"`
+	}
+	body, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+
+	println(string(body))
+
+	err := json.Unmarshal(body, &port)
+	if err != nil {
+		log.Print("failure unmarshalling address")
+		http.Error(w, "malformed port", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Added port %d\n", port)
+
 	if ip != "" {
-		ip_m.addPeer(getIP(r.RemoteAddr))
+		ip_m.addPeer(ip, port.Port)
 		log.Println(string(r.RemoteAddr))
 	}
 
@@ -160,33 +178,18 @@ func main() {
 		return
 	}
 
-	dialer := &net.Dialer{
-		LocalAddr: &net.TCPAddr{
-			Port: port,
-		},
-	}
-
-	dialer.Control = func(network, address string, c syscall.RawConn) error {
-		return c.Control(func(fd uintptr) {
-			syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-		})
-	}
-
-	transport := &http.Transport{
-		DialContext: dialer.DialContext,
-	}
-
-	client = http.Client{
-		Transport: transport,
-		Timeout:   30 * time.Second,
-	}
+	println(len(os.Args))
 
 	if len(os.Args) > 2 {
 		boot_ip := os.Args[2]
 
 		ip_manager.addPeer(getIP(boot_ip))
 
-		res, err := client.Get("http://" + boot_ip + "/getPeerList")
+		var json_body = []byte(fmt.Sprintf(`{"port": %d}`, port))
+
+		res, err := http.Post("http://"+boot_ip+"/getPeerList", "application/json", bytes.NewBuffer(json_body))
+
+		println(res.Status)
 
 		if err != nil {
 			log.Printf("Error connecting to boot server: %s\n", err)
@@ -196,15 +199,16 @@ func main() {
 			if err != nil {
 				log.Printf("Error pasrsing json: %s\n", err)
 			} else {
+				println("added peers")
 				for _, peer := range ip_manager.peers {
-					log.Printf("%s: %d", peer.ip, peer.port)
+					fmt.Printf("     %s: %d\n", peer.ip, peer.port)
 				}
 			}
 		}
 	}
 
 	router := mux.NewRouter()
-	router.HandleFunc("/getPeerList", ip_manager.getPeerList).Methods("GET")
+	router.HandleFunc("/getPeerList", ip_manager.getPeerList).Methods("POST")
 	router.HandleFunc("/", shareModel).Methods("GET")
 
 	log.Printf("starting server on port %d", port)
