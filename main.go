@@ -43,7 +43,6 @@ func newIP_Manager() IP_Manager {
 
 var ip_manager IP_Manager
 var my_super_cool_number SuperCoolNumber
-var client http.Client
 
 func updateModel(n int) {
 	my_super_cool_number.mu.Lock()
@@ -71,7 +70,7 @@ func getNRandModels(n int) {
 	for i := range n {
 		i++
 		ip := ip_manager.peers[peer_list[rand.IntN(n)]]
-		res, err := http.Get("http://" + ip.ip + ":" + strconv.Itoa(ip.port))
+		res, err := http.Get("http://" + ip.ip + ":" + strconv.Itoa(ip.port) + "/model")
 		if err != nil {
 			log.Println(err.Error())
 			continue
@@ -87,12 +86,35 @@ func getNRandModels(n int) {
 
 }
 
+func collectModels(w http.ResponseWriter, r *http.Request) {
+	var num_models struct {
+		NumModels int `json:"num_models"`
+	}
+
+	body, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+
+	println(string(body))
+
+	err := json.Unmarshal(body, &num_models)
+	if err != nil {
+		log.Print("failure unmarshalling num_models")
+		http.Error(w, "error unmarshalling number of requested models", http.StatusBadRequest)
+		return
+	}
+
+	getNRandModels(num_models.NumModels)
+
+	println(num_models.NumModels)
+}
+
 func shareModel(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(my_super_cool_number.n)
 }
 
 func (ip_m *IP_Manager) addPeer(ip string, port int) {
 	if ip == "" || port == 0 {
+		log.Println("bad peer ip or port")
 		return
 	}
 	ip_m.mu.Lock()
@@ -110,20 +132,17 @@ func (ip_m *IP_Manager) getPeerList(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
 
-	println(string(body))
-
 	err := json.Unmarshal(body, &port)
 	if err != nil {
 		log.Print("failure unmarshalling address")
-		http.Error(w, "malformed port", http.StatusBadRequest)
+		http.Error(w, "error unmarshalling port", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Added port %d\n", port)
+	log.Printf("Added port %d\n", port.Port)
 
 	if ip != "" {
 		ip_m.addPeer(ip, port.Port)
-		log.Println(string(r.RemoteAddr))
 	}
 
 	keys := make([]string, len(ip_m.peers))
@@ -143,8 +162,6 @@ func (ip_m *IP_Manager) parsePeerList(r *http.Response) error {
 	body, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
 
-	println(body)
-
 	err := json.Unmarshal(body, &ips)
 	if err != nil {
 		return err
@@ -159,17 +176,23 @@ func (ip_m *IP_Manager) parsePeerList(r *http.Response) error {
 
 // TODO: currently doesnt work for proxies but could extend if wanted
 func getIP(s string) (string, int) {
+	if s[:3] == "::1" { // localhost workaround since IPv6 is weird locally
+		s = "localhost" + s[3:]
+	}
+
 	host, portStr, err := net.SplitHostPort(s)
 	if err != nil {
+		log.Println("Error spliting port: " + err.Error())
 		return "", 0
 	}
 	port, _ := strconv.Atoi(portStr)
+
 	return host, port
 }
 
 func main() {
 	my_super_cool_number = newSuperCoolNumber(rand.IntN(100))
-	println(my_super_cool_number.n)
+	fmt.Printf("number: %d\n", my_super_cool_number.n)
 
 	ip_manager = newIP_Manager()
 	port, err := strconv.Atoi(os.Args[1])
@@ -178,8 +201,6 @@ func main() {
 		return
 	}
 
-	println(len(os.Args))
-
 	if len(os.Args) > 2 {
 		boot_ip := os.Args[2]
 
@@ -187,9 +208,7 @@ func main() {
 
 		var json_body = []byte(fmt.Sprintf(`{"port": %d}`, port))
 
-		res, err := http.Post("http://"+boot_ip+"/getPeerList", "application/json", bytes.NewBuffer(json_body))
-
-		println(res.Status)
+		res, err := http.Post("http://"+boot_ip+"/peerList", "application/json", bytes.NewBuffer(json_body))
 
 		if err != nil {
 			log.Printf("Error connecting to boot server: %s\n", err)
@@ -208,8 +227,9 @@ func main() {
 	}
 
 	router := mux.NewRouter()
-	router.HandleFunc("/getPeerList", ip_manager.getPeerList).Methods("POST")
-	router.HandleFunc("/", shareModel).Methods("GET")
+	router.HandleFunc("/peerList", ip_manager.getPeerList).Methods("POST")
+	router.HandleFunc("/model", shareModel).Methods("GET")
+	router.HandleFunc("/collectModels", collectModels).Methods("GET")
 
 	log.Printf("starting server on port %d", port)
 
