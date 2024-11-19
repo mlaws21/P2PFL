@@ -4,6 +4,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import random_split, DataLoader, Subset
 from tqdm import tqdm
+import os
 
 
 def generate_partition_data(batch_size=32, num_clients=10, labels_per_client=7, train_proportion=0.8):
@@ -168,6 +169,45 @@ def evaluate(model, dataloader, criterion):
     return {"loss": avg_loss, "accuracy": accuracy}
 
 
+def aggregate_models(model_paths, base_model_class):
+    """
+    Aggregates model weights from multiple .pth files using Federated Averaging (FedAvg).
+    
+    Parameters:
+        model_paths (list): List of file paths to the .pth files (one per client).
+        base_model_class (torch.nn.Module): Class of the base model (used to initialize the aggregated model).
+        device (str): Device to load and process the models ("cpu" or "cuda").
+    
+    Returns:
+        aggregated_model (torch.nn.Module): The model with aggregated weights.
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Load the state dictionaries from all models
+    state_dicts = [torch.load(path, map_location=device) for path in model_paths]
+    
+    # Initialize the base model and its state_dict
+    base_model = base_model_class().to(device)
+    aggregated_state_dict = base_model.state_dict()
+    
+    # Initialize the aggregated weights as zero
+    for key in aggregated_state_dict.keys():
+        aggregated_state_dict[key] = torch.zeros_like(aggregated_state_dict[key], dtype=torch.float32)
+    
+    # Aggregate weights from all models
+    num_models = len(state_dicts)
+    for state_dict in state_dicts:
+        for key in aggregated_state_dict.keys():
+            aggregated_state_dict[key] += state_dict[key]
+    
+    # Average the weights
+    for key in aggregated_state_dict.keys():
+        aggregated_state_dict[key] /= num_models
+    
+    # Load the aggregated weights into the base model
+    base_model.load_state_dict(aggregated_state_dict)
+    return base_model
+
 dataloaders, test_dataloader = generate_partition_data()
 
 criterion = nn.CrossEntropyLoss()
@@ -175,14 +215,20 @@ criterion = nn.CrossEntropyLoss()
 
 
 model = SimpleCNN()
+
+
+model_paths = [os.path.join("models", x) for x in os.listdir("models")]
+
+
+aggregated_model = aggregate_models(model_paths, SimpleCNN)
 # model.load_state_dict(torch.load("model.pth"))
 
-# print(evaluate(model, test_dataloader, criterion))
+print(evaluate(aggregated_model, test_dataloader, criterion))
 
 
-for i, ele in dataloaders.items():
-    model = train_model(ele, model, criterion)
-    torch.save(model.state_dict(), f"model{i}.pth")
+# for i, ele in dataloaders.items():
+#     model = train_model(ele, model, criterion)
+#     torch.save(model.state_dict(), f"model{i}.pth")
     
 
 
