@@ -84,7 +84,9 @@ class SimpleCNN(nn.Module):
 
 
 def train_model(dataloader, model, criterion, optimizer_fn=optim.Adam, epochs=5):
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"USING: {device}")
     model = model.to(device)
     optimizer = optimizer_fn(model.parameters())
     
