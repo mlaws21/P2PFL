@@ -180,7 +180,7 @@ model = SimpleCNN()
 # print(evaluate(model, test_dataloader, criterion))
 
 for i, ele in enumerate(dataloaders):
-    model = train_model(i, model, criterion)
+    model = train_model(ele, model, criterion)
     torch.save(model.state_dict(), f"model{i}.pth")
     
 
