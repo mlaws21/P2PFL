@@ -1,3 +1,8 @@
+// TODO: make python client
+// TODO: switch to grpc for p2p communication
+// TODO: figure out what protocol to use for go-python connection
+//     - make sure that only the python client has access to the go client functions besides getModel and peerList
+
 package main
 
 import (
@@ -30,11 +35,11 @@ type IP_Manager struct {
 
 type SuperCoolNumber struct {
 	mu sync.Mutex
-	n  int
+	N  int `json:"n"`
 }
 
 func newSuperCoolNumber(n int) SuperCoolNumber {
-	return SuperCoolNumber{n: n}
+	return SuperCoolNumber{N: n}
 }
 
 func newIP_Manager() IP_Manager {
@@ -48,18 +53,17 @@ func updateModel(n int) {
 	my_super_cool_number.mu.Lock()
 	defer my_super_cool_number.mu.Unlock()
 
-	my_super_cool_number.n = n
+	my_super_cool_number.N = n
 }
 
-func getNRandModels(n int) {
+func getNRandModels(n int) []SuperCoolNumber {
 	if len(ip_manager.peers) < n {
 		log.Printf("requested %d models but have %d peers", n, len(ip_manager.peers))
 		n = len(ip_manager.peers)
 	}
 
 	peer_list := make([]string, len(ip_manager.peers))
-	models := make([]SuperCoolNumber, n)
-	models = append(models, newSuperCoolNumber(0))
+	var models []SuperCoolNumber
 
 	i := 0
 	for k := range ip_manager.peers {
@@ -77,12 +81,22 @@ func getNRandModels(n int) {
 		}
 		body, err := io.ReadAll(res.Body)
 		defer res.Body.Close()
+		if err != nil {
+			continue
+		}
 
 		var a int
 		err = json.Unmarshal(body, &a)
+		if err != nil {
+			continue
+		}
 
-		log.Printf("%d: %d", ip.port, a)
+		log.Printf("aaaaa%d: %d", ip.port, a)
+
+		models = append(models, SuperCoolNumber{N: a})
 	}
+
+	return models
 
 }
 
@@ -103,13 +117,19 @@ func collectModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	getNRandModels(num_models.NumModels)
+	models := getNRandModels(num_models.NumModels)
+
+	for _, n := range models {
+		fmt.Printf("wowowow %d\n", n.N)
+	}
 
 	println(num_models.NumModels)
+
+	json.NewEncoder(w).Encode(models)
 }
 
 func shareModel(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(my_super_cool_number.n)
+	json.NewEncoder(w).Encode(my_super_cool_number.N)
 }
 
 func (ip_m *IP_Manager) addPeer(ip string, port int) {
@@ -192,7 +212,7 @@ func getIP(s string) (string, int) {
 
 func main() {
 	my_super_cool_number = newSuperCoolNumber(rand.IntN(100))
-	fmt.Printf("number: %d\n", my_super_cool_number.n)
+	fmt.Printf("number: %d\n", my_super_cool_number.N)
 
 	ip_manager = newIP_Manager()
 	port, err := strconv.Atoi(os.Args[1])
