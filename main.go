@@ -49,11 +49,25 @@ func newIP_Manager() IP_Manager {
 var ip_manager IP_Manager
 var my_super_cool_number SuperCoolNumber
 
-func updateModel(n int) {
+func updateModel(w http.ResponseWriter, r *http.Request) {
+	var n struct {
+		N int `json:"num_models"`
+	}
+
+	body, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+
+	err := json.Unmarshal(body, &n)
+	if err != nil {
+		log.Print("failure unmarshalling n")
+		http.Error(w, "error unmarshalling n", http.StatusBadRequest)
+		return
+	}
+
 	my_super_cool_number.mu.Lock()
 	defer my_super_cool_number.mu.Unlock()
 
-	my_super_cool_number.N = n
+	my_super_cool_number.N = n.N
 }
 
 func getNRandModels(n int) []SuperCoolNumber {
@@ -250,6 +264,7 @@ func main() {
 	router.HandleFunc("/peerList", ip_manager.getPeerList).Methods("POST")
 	router.HandleFunc("/model", shareModel).Methods("GET")
 	router.HandleFunc("/collectModels", collectModels).Methods("GET")
+	router.HandleFunc("/updateModel", updateModel).Methods("POST")
 
 	log.Printf("starting server on port %d", port)
 
