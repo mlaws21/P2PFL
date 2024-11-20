@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	port       = flag.Int("port", 8080, "server port")
+	port       = flag.Uint64("port", 8080, "server port")
 	boot_ip    = flag.String("boo_ip", "localhost:8080", "boot server ip")
 	ip_manager = IP_Manager{Peers: make(map[string]*pb.Peer)}
 )
@@ -73,7 +73,7 @@ func (ip_manager *IP_Manager) GetPeerList() map[string]*pb.Peer {
 }
 
 func (s *server) GetModel(in *pb.GetModelRequest, stream pb.ModelService_GetModelServer) error {
-	file, err := os.Open("/Users/nathanvosburg/Documents/CS339/dist_final_project/models/model0.pth")
+	file, err := os.Open("/Users/nathanvosburg/Documents/CS339/dist_final_project/models/model1.pth")
 	if err != nil {
 		return err
 	}
@@ -111,6 +111,45 @@ func (s *server) GetPeerList(ctx context.Context, in *pb.GetPeerListRequest) (*p
 	return &pb.GetPeerListResponse{
 		Peers: ip_manager.Peers,
 	}, nil
+}
+
+func getRandomModel(id uint32, peers []pb.Peer) error {
+	file, err := os.Create(fmt.Sprintf("model%d.pth", id))
+	if err != nil {
+		return fmt.Errorf("failed to create file: %s", err.Error())
+	}
+	defer file.Close()
+
+	conn, err := grpc.NewClient("localhost:8080", grpc.WithInsecure())
+	if err != nil {
+		return fmt.Errorf("failed to connect: %s", err.Error())
+	}
+	defer conn.Close()
+
+	client := pb.NewModelServiceClient(conn)
+
+	stream, err := client.GetModel(context.Background(), &pb.GetModelRequest{Port: uint32(*port)})
+	if err != nil {
+		return fmt.Errorf("error getting model: %s", err.Error())
+	}
+
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to recieve chunk: %s", err.Error())
+		}
+
+		_, err = file.Write(chunk.Chunk)
+		if err != nil {
+			return fmt.Errorf("failed to write chunk: %s", err.Error())
+		}
+	}
+	log.Println("Model download complete!")
+
+	return nil
 }
 
 func (s *server) CollectModels(_ context.Context, in *pb.CollectModelRequest) (*pb.CollectModelResponse, error) {
@@ -159,6 +198,11 @@ func boot() error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	r, err := c.GetPeerList(ctx, &pb.GetPeerListRequest{Port: uint32(*port)})
+	if err != nil {
+		return err
+	}
+
+	err = getRandomModel(1, nil)
 	if err != nil {
 		return err
 	}
