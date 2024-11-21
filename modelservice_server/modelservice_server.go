@@ -29,7 +29,7 @@ var (
 	key              = flag.String("key", "secret", "key for CollectModels")
 	local_model_path = flag.String(
 		"local_model_path",
-		"local_model.pth",
+		"my_model.pth",
 		"path to local model file",
 	)
 	collected_models_path = flag.String(
