@@ -178,7 +178,7 @@ func getRandomModel(id uint32, peers []*pb.Peer) error {
 
 func (s *server) CollectModels(_ context.Context, in *pb.CollectModelsRequest) (*pb.CollectModelsResponse, error) {
 
-	defer os.Create(".DONE")
+	defer os.Create(fmt.Sprintf("%d_data/.DONE", *port))
 	if in.Key != *key {
 		return &pb.CollectModelsResponse{
 			Success: false,
@@ -225,6 +225,7 @@ func runServer() {
 }
 
 func boot() error {
+
 	conn, err := grpc.NewClient(*boot_ip, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -266,6 +267,13 @@ func boot() error {
 		fmt.Printf("%s:%d\n", v.Ip, v.Port)
 	}
 
+	err = os.RemoveAll("%d_data")
+
+	err = os.Mkdir(fmt.Sprintf("%d_data", *port), 0755) // Permissions set to 0666 (read/write/execute for owner, read/execute for others)
+	if err != nil {
+		fmt.Printf("Error creating directory: %v\n", err)
+		return err
+	}
 	return nil
 }
 

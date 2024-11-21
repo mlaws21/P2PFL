@@ -12,6 +12,7 @@ import os
 from torch.utils.data import DataLoader, Dataset
 import random
 import fcntl
+import shutil
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu")
 print(f"USING: {DEVICE}")
 
@@ -166,7 +167,7 @@ def bad_file_completion(path, timeout=5):
         
     return False
 
-def aggregate_models(agg_dir, base_model_class, timeout=10):
+def aggregate_models(data_dir, agg_dir, base_model_class, timeout=10):
     """
     Aggregates model weights from multiple .pth files using Federated Averaging (FedAvg).
     
@@ -182,7 +183,7 @@ def aggregate_models(agg_dir, base_model_class, timeout=10):
     # Load the state dictionaries from all models
 
     while time() - stime < timeout:
-        if os.path.exists(".DONE"):
+        if os.path.exists(os.path.join(data_dir, ".DONE")):
             
             agg_paths = [os.path.join(agg_dir, x) for x in os.listdir(agg_dir)]
 
@@ -219,9 +220,9 @@ def aggregate_models(agg_dir, base_model_class, timeout=10):
             
             # Load the aggregated weights into the base model
             base_model.load_state_dict(aggregated_state_dict)
-            os.remove(".DONE")
+            os.remove(os.path.join(data_dir, ".DONE"))
             return base_model
-        
+        sleep(1)
         print("TIMEOUT")
         return None
 
@@ -256,11 +257,17 @@ def main():
     # lowkey could boot the go client at the start 
     # TODO this makes more sense with NLP tasks maybe
     
-    
+    sleep(5)
     if len(sys.argv) > 2:
         dataset = JSONDataset(sys.argv[1])
         dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
         port = int(sys.argv[2])
+        data_dir = f"{port}_data"
+        agg_dir = os.path.join(data_dir, "agg")
+        os.mkdir(agg_dir)
+
+            
+        
         
     else:
         print("Usage: python prototype.py [data json] [port]")
@@ -292,7 +299,7 @@ def main():
 
                 # Secret key and number of models to collect
                 secret_key = "secret"
-                num_models = 1
+                num_models = 3
 
                 # Call the function
                 collect_models(client, secret_key, num_models, timeout=10)
@@ -314,8 +321,7 @@ def main():
             # print("models received")
             
             # agg_paths = random.sample(agg_paths, 3) # this is only bc we are not actaully sending models yet -- TODO remove eventually
-            agg_dir = "agg"
-            model = aggregate_models(agg_dir, SimpleCNN)
+            model = aggregate_models(data_dir, agg_dir, SimpleCNN)
             
             start = time()
             
@@ -324,10 +330,11 @@ def main():
         
         print(evaluate(model, test_dataloader, criterion))
 
-        temp_path = f"my_model{port}.tmp"
+        temp_path = os.path.join(data_dir, "my_model.tmp")
         try: 
             torch.save(model.state_dict(), temp_path)
-            os.replace(temp_path, "my_model{port}.pth")
+            
+            os.replace(temp_path, os.path.join(data_dir, "my_model.pth"))
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)        
