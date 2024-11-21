@@ -19,9 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ModelService_GetModel_FullMethodName     = "/modelservice.ModelService/GetModel"
-	ModelService_GetPeerList_FullMethodName  = "/modelservice.ModelService/GetPeerList"
-	ModelService_CollectModel_FullMethodName = "/modelservice.ModelService/CollectModel"
+	ModelService_GetModel_FullMethodName      = "/modelservice.ModelService/GetModel"
+	ModelService_GetPeerList_FullMethodName   = "/modelservice.ModelService/GetPeerList"
+	ModelService_CollectModels_FullMethodName = "/modelservice.ModelService/CollectModels"
 )
 
 // ModelServiceClient is the client API for ModelService service.
@@ -32,7 +32,7 @@ const (
 type ModelServiceClient interface {
 	GetModel(ctx context.Context, in *GetModelRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetModelReply], error)
 	GetPeerList(ctx context.Context, in *GetPeerListRequest, opts ...grpc.CallOption) (*GetPeerListResponse, error)
-	CollectModel(ctx context.Context, in *CollectModelRequest, opts ...grpc.CallOption) (*CollectModelResponse, error)
+	CollectModels(ctx context.Context, in *CollectModelsRequest, opts ...grpc.CallOption) (*CollectModelsResponse, error)
 }
 
 type modelServiceClient struct {
@@ -72,10 +72,10 @@ func (c *modelServiceClient) GetPeerList(ctx context.Context, in *GetPeerListReq
 	return out, nil
 }
 
-func (c *modelServiceClient) CollectModel(ctx context.Context, in *CollectModelRequest, opts ...grpc.CallOption) (*CollectModelResponse, error) {
+func (c *modelServiceClient) CollectModels(ctx context.Context, in *CollectModelsRequest, opts ...grpc.CallOption) (*CollectModelsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CollectModelResponse)
-	err := c.cc.Invoke(ctx, ModelService_CollectModel_FullMethodName, in, out, cOpts...)
+	out := new(CollectModelsResponse)
+	err := c.cc.Invoke(ctx, ModelService_CollectModels_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (c *modelServiceClient) CollectModel(ctx context.Context, in *CollectModelR
 type ModelServiceServer interface {
 	GetModel(*GetModelRequest, grpc.ServerStreamingServer[GetModelReply]) error
 	GetPeerList(context.Context, *GetPeerListRequest) (*GetPeerListResponse, error)
-	CollectModel(context.Context, *CollectModelRequest) (*CollectModelResponse, error)
+	CollectModels(context.Context, *CollectModelsRequest) (*CollectModelsResponse, error)
 	mustEmbedUnimplementedModelServiceServer()
 }
 
@@ -107,8 +107,8 @@ func (UnimplementedModelServiceServer) GetModel(*GetModelRequest, grpc.ServerStr
 func (UnimplementedModelServiceServer) GetPeerList(context.Context, *GetPeerListRequest) (*GetPeerListResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPeerList not implemented")
 }
-func (UnimplementedModelServiceServer) CollectModel(context.Context, *CollectModelRequest) (*CollectModelResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CollectModel not implemented")
+func (UnimplementedModelServiceServer) CollectModels(context.Context, *CollectModelsRequest) (*CollectModelsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CollectModels not implemented")
 }
 func (UnimplementedModelServiceServer) mustEmbedUnimplementedModelServiceServer() {}
 func (UnimplementedModelServiceServer) testEmbeddedByValue()                      {}
@@ -160,20 +160,20 @@ func _ModelService_GetPeerList_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ModelService_CollectModel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CollectModelRequest)
+func _ModelService_CollectModels_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CollectModelsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ModelServiceServer).CollectModel(ctx, in)
+		return srv.(ModelServiceServer).CollectModels(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ModelService_CollectModel_FullMethodName,
+		FullMethod: ModelService_CollectModels_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ModelServiceServer).CollectModel(ctx, req.(*CollectModelRequest))
+		return srv.(ModelServiceServer).CollectModels(ctx, req.(*CollectModelsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -190,8 +190,8 @@ var ModelService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ModelService_GetPeerList_Handler,
 		},
 		{
-			MethodName: "CollectModel",
-			Handler:    _ModelService_CollectModel_Handler,
+			MethodName: "CollectModels",
+			Handler:    _ModelService_CollectModels_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

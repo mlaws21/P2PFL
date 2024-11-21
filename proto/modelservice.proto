@@ -7,15 +7,15 @@ package modelservice;
 service ModelService {
     rpc GetModel (GetModelRequest) returns (stream GetModelReply) {}
     rpc GetPeerList (GetPeerListRequest) returns (GetPeerListResponse) {}
-    rpc CollectModel (CollectModelRequest) returns (CollectModelResponse) {}
+    rpc CollectModels (CollectModelsRequest) returns (CollectModelsResponse) {}
 }
 
-message CollectModelRequest {
+message CollectModelsRequest {
     string key = 1;
     uint32 num = 2;
 }
 
-message CollectModelResponse {
+message CollectModelsResponse {
     bool success = 1;
 }
 
