@@ -16,5 +16,4 @@ generate_proto() {
             proto/*.proto
 }
 
-# Run generation
 generate_proto
