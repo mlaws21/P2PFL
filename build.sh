@@ -7,6 +7,13 @@ generate_proto() {
            --go-grpc_out=. \
            --go-grpc_opt=paths=source_relative \
            proto/*.proto
+    
+    # lowkey should not have two differnt commands here but idk man
+    python3 -m grpc_tools.protoc \
+            -I. \
+            --python_out=. \
+            --grpc_python_out=. \
+            proto/*.proto
 }
 
 # Run generation

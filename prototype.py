@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.optim as optim
 import json
 import sys
+#import grpc        my python is weird so im not 100% sure how to do these imports
+#import modelservice_pb2
+#import modelservice_pb2_grpc
 from time import time, sleep
 from tqdm import tqdm
 import os
@@ -187,6 +190,7 @@ def aggregate_models(model_paths, base_model_class):
 
 
 def main():
+    # lowkey could boot the go client at the start 
     # TODO this makes more sense with NLP tasks maybe
     
     
@@ -214,6 +218,19 @@ def main():
             # this would be an RPC
             print("BLOCK and requesting other models to be pushed into the to_aggregate folder")
             sleep(3)
+
+            """
+            so what should go here is a call to the CollectModels funciton of the go client
+            this passes:
+            - secret key (set at boot of go client via flag)  
+            - number of models to collect
+            the go client then response with the actual number of models that have been collected
+                NOTE: could be lower than requested due to lack of peers or connection failures
+            ideally should be some timeout where if there are no models recieved by then it just
+            goes back to training maybe. idk though
+            """
+
+
             print("models received")
             
             agg_paths = [os.path.join("to_aggregate", x) for x in os.listdir("to_aggregate")]

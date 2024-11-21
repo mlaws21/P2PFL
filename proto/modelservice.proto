@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 option go_package = "dist_final_project/proto";
+
 package modelservice;
 
 // Definition of ModelService
