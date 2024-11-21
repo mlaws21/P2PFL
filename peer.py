@@ -313,8 +313,14 @@ def main():
             model = train_model(dataloader, model, criterion, epochs=1)
         
         print(evaluate(model, test_dataloader, criterion))
-        torch.save(model.state_dict(), f"my_model{port}.pth")
-        
+
+        temp_path = f"my_model{port}.tmp"
+        try: 
+            torch.save(model.state_dict(), temp_path)
+            os.replace(temp_path, "my_model{port}.pth")
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)        
 
 if __name__ == "__main__":
     main()
