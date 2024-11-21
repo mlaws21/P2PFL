@@ -177,6 +177,8 @@ func getRandomModel(id uint32, peers []*pb.Peer) error {
 }
 
 func (s *server) CollectModels(_ context.Context, in *pb.CollectModelsRequest) (*pb.CollectModelsResponse, error) {
+
+	defer os.Create(".DONE")
 	if in.Key != *key {
 		return &pb.CollectModelsResponse{
 			Success: false,

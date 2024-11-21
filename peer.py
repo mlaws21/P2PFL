@@ -166,7 +166,7 @@ def bad_file_completion(path, timeout=5):
         
     return False
 
-def aggregate_models(model_paths, base_model_class):
+def aggregate_models(agg_dir, base_model_class, timeout=10):
     """
     Aggregates model weights from multiple .pth files using Federated Averaging (FedAvg).
     
@@ -178,42 +178,52 @@ def aggregate_models(model_paths, base_model_class):
     Returns:
         aggregated_model (torch.nn.Module): The model with aggregated weights.
     """
-    
+    stime = time()
     # Load the state dictionaries from all models
-    # state_dicts = [torch.load(path, map_location=DEVICE, weights_only=False) for path in model_paths]
-    
-    state_dicts = []
-    
-    # TODO maybe?
-    for path in model_paths:
+
+    while time() - stime < timeout:
+        if os.path.exists(".DONE"):
+            
+            agg_paths = [os.path.join("agg_dir", x) for x in os.listdir(agg_dir)]
+
+            state_dicts = [torch.load(path, map_location=DEVICE, weights_only=False) for path in agg_paths]
+            
+            # state_dicts = []
+            
+            # # TODO maybe?
+            # for path in model_paths:
+                
+            #     fp = open(path, 'r')
+            #     fcntl.flock(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)  # Attempt to acquire an exclusive lock
+            #     fcntl.flock(fp, fcntl.LOCK_UN)  # Release the lock if successful
+            #     state_dicts.append(torch.load(path, map_location=DEVICE, weights_only=False))
+            
+            
+            # Initialize the base model and its state_dict
+            base_model = base_model_class().to(DEVICE)
+            aggregated_state_dict = base_model.state_dict()
+            
+            # Initialize the aggregated weights as zero
+            for key in aggregated_state_dict.keys():
+                aggregated_state_dict[key] = torch.zeros_like(aggregated_state_dict[key], dtype=torch.float32)
+            
+            # Aggregate weights from all models
+            num_models = len(state_dicts)
+            for state_dict in state_dicts:
+                for key in aggregated_state_dict.keys():
+                    aggregated_state_dict[key] += state_dict[key]
+            
+            # Average the weights
+            for key in aggregated_state_dict.keys():
+                aggregated_state_dict[key] /= num_models
+            
+            # Load the aggregated weights into the base model
+            base_model.load_state_dict(aggregated_state_dict)
+            os.remove(".DONE")
+            return base_model
         
-        fp = open(path, 'r')
-        fcntl.flock(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)  # Attempt to acquire an exclusive lock
-        fcntl.flock(fp, fcntl.LOCK_UN)  # Release the lock if successful
-        state_dicts.append(torch.load(path, map_location=DEVICE, weights_only=False))
-    
-    
-    # Initialize the base model and its state_dict
-    base_model = base_model_class().to(DEVICE)
-    aggregated_state_dict = base_model.state_dict()
-    
-    # Initialize the aggregated weights as zero
-    for key in aggregated_state_dict.keys():
-        aggregated_state_dict[key] = torch.zeros_like(aggregated_state_dict[key], dtype=torch.float32)
-    
-    # Aggregate weights from all models
-    num_models = len(state_dicts)
-    for state_dict in state_dicts:
-        for key in aggregated_state_dict.keys():
-            aggregated_state_dict[key] += state_dict[key]
-    
-    # Average the weights
-    for key in aggregated_state_dict.keys():
-        aggregated_state_dict[key] /= num_models
-    
-    # Load the aggregated weights into the base model
-    base_model.load_state_dict(aggregated_state_dict)
-    return base_model
+        print("TIMEOUT")
+        return None
 
 def collect_models(client, secret_key, num_models, timeout=10):
     """
@@ -282,7 +292,7 @@ def main():
 
                 # Secret key and number of models to collect
                 secret_key = "secret"
-                num_models = 2
+                num_models = 1
 
                 # Call the function
                 collect_models(client, secret_key, num_models, timeout=10)
@@ -303,9 +313,9 @@ def main():
 
             # print("models received")
             
-            agg_paths = [os.path.join("agg", x) for x in os.listdir("agg")]
             # agg_paths = random.sample(agg_paths, 3) # this is only bc we are not actaully sending models yet -- TODO remove eventually
-            model = aggregate_models(agg_paths, SimpleCNN)
+            agg_dir = "agg"
+            model = aggregate_models(agg_dir, SimpleCNN)
             
             start = time()
             
