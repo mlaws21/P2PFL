@@ -184,7 +184,7 @@ def aggregate_models(agg_dir, base_model_class, timeout=10):
     while time() - stime < timeout:
         if os.path.exists(".DONE"):
             
-            agg_paths = [os.path.join("agg_dir", x) for x in os.listdir(agg_dir)]
+            agg_paths = [os.path.join(agg_dir, x) for x in os.listdir(agg_dir)]
 
             state_dicts = [torch.load(path, map_location=DEVICE, weights_only=False) for path in agg_paths]
             
