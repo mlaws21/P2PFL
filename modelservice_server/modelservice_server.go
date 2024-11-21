@@ -58,7 +58,12 @@ func (ip_manager *IP_Manager) AddPeerFromContext(ctx context.Context, port uint3
 	if !ok {
 		return errors.New("could not get peer info from context")
 	}
-	return ip_manager.AddPeer(p.Addr.String(), port)
+	addr, _, err := net.SplitHostPort(p.Addr.String())
+	if err != nil {
+		return fmt.Errorf("failed to split boot host/port: %v", err)
+	}
+
+	return ip_manager.AddPeer(addr, port)
 }
 
 func (ip_manager *IP_Manager) AddPeer(address string, port uint32) error {
