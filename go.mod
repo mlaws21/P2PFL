@@ -3,7 +3,6 @@ module dist_final_project
 go 1.23.1
 
 require (
-	github.com/gorilla/mux v1.8.1
 	google.golang.org/grpc v1.68.0
 	google.golang.org/protobuf v1.35.2
 )

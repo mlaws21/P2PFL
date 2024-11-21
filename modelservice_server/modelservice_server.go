@@ -26,15 +26,16 @@ import (
 var (
 	port             = flag.Uint64("port", 8080, "server port")
 	boot_ip          = flag.String("boo_ip", "localhost:8080", "boot server ip")
+	key              = flag.String("key", "secret", "key for CollectModels")
 	local_model_path = flag.String(
 		"local_model_path",
 		"local_model.pth",
-		"Path to local model file",
+		"path to local model file",
 	)
 	collected_models_path = flag.String(
 		"collected_models_path",
-		"./collected_models",
-		"Directory path for collected models",
+		"./",
+		"directory path for collected models",
 	)
 	ip_manager = IP_Manager{Peers: make(map[string]*pb.Peer)}
 )
@@ -87,6 +88,7 @@ func (ip_manager *IP_Manager) GetPeerList() map[string]*pb.Peer {
 	return peers
 }
 
+// TODO: needs a way of better handling updates with python client
 func (s *server) GetModel(in *pb.GetModelRequest, stream pb.ModelService_GetModelServer) error {
 	file, err := os.Open(*local_model_path)
 	if err != nil {
@@ -170,7 +172,7 @@ func getRandomModel(id uint32, peers []*pb.Peer) error {
 }
 
 func (s *server) CollectModels(_ context.Context, in *pb.CollectModelsRequest) (*pb.CollectModelsResponse, error) {
-	if in.Key != "key" {
+	if in.Key != *key {
 		return &pb.CollectModelsResponse{
 			Success: false,
 		}, errors.New("unauthorized")
