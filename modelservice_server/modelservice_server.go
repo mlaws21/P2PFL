@@ -204,6 +204,14 @@ func getBootModel(ip string) error {
 	return nil
 }
 
+func Min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+
 func getModel(id uint32, peer *pb.Peer) error {
 
 	file, err := os.Create(fmt.Sprintf("%s/model%d.pth", *collected_models_path, id))
@@ -259,6 +267,12 @@ func (s *server) CollectModels(_ context.Context, in *pb.CollectModelsRequest) (
 		log.Printf("%s:%d", v.Ip, v.Port)
 	}
 
+	if len(ip_manager.Peers) == 0 {
+		return &pb.CollectModelsResponse{
+			Success: false,
+		}, errors.New("No models to aggregate")
+	}
+
 	for i := uint32(1); i <= in.Num; i++ {
 		chosen_peer := p[rand.Intn(len(p))]
 
@@ -295,6 +309,28 @@ func runServer() {
 }
 
 func boot() error {
+
+	// Remove the directory if it exists
+	// if _, err := os.Stat("%d_data"); !os.IsNotExist(err) {
+	// 	fmt.Printf("Directory %s exists, removing it...\n", "%d_data")
+	// 	err := os.RemoveAll("%d_data")
+	// 	if err != nil {
+	// 		fmt.Printf("Error removing directory: %v\n", err)
+	// 		return err
+	// 	}
+	// }
+
+	err := os.RemoveAll(fmt.Sprintf("%d_data", *port))
+	if err != nil {
+		fmt.Printf("Error removing data: %v\n", err)
+		return err
+	}
+
+	err = os.Mkdir(fmt.Sprintf("%d_data", *port), 0755) // Permissions set to 0666 (read/write/execute for owner, read/execute for others)
+	if err != nil {
+		fmt.Printf("Error creating directory: %v\n", err)
+		return err
+	}
 
 	conn, err := grpc.NewClient(*boot_ip, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -335,14 +371,6 @@ func boot() error {
 
 	for _, v := range ip_manager.Peers {
 		fmt.Printf("%s:%d\n", v.Ip, v.Port)
-	}
-
-	err = os.RemoveAll("%d_data")
-
-	err = os.Mkdir(fmt.Sprintf("%d_data", *port), 0755) // Permissions set to 0666 (read/write/execute for owner, read/execute for others)
-	if err != nil {
-		fmt.Printf("Error creating directory: %v\n", err)
-		return err
 	}
 
 	err = getBootModel(*boot_ip)
