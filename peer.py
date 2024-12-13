@@ -13,10 +13,31 @@ from torch.utils.data import DataLoader, Dataset
 import random
 import fcntl
 import shutil
+import importlib
+import inspect
+
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu")
 print(f"USING: {DEVICE}")
 
+def get_model_arch(module_name, filepath=None): #filepath defaults to module_name.py
+    # Dynamically import the module
+    
+    if filepath is None:
+        filepath = module_name + ".py"
+    spec = importlib.util.spec_from_file_location(module_name, filepath)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
 
+    # Find the single class in the module
+    classes = [obj for name, obj in inspect.getmembers(module, inspect.isclass) 
+               if obj.__module__ == module_name]
+
+    if len(classes) != 1:
+        raise ValueError("The module must contain exactly one class.")
+    
+    return classes[0]  # Return the single class
+
+# print(get_model_arch("model_arch"))
 
 class JSONDataset(Dataset):
     """
@@ -35,35 +56,6 @@ class JSONDataset(Dataset):
         label = torch.tensor(sample["label"], dtype=torch.long)  # Convert back to tensor
         return data, label
 
-
-
-class SimpleCNN(nn.Module):
-    def __init__(self):
-        super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(12544, 128)
-        self.fc2 = nn.Linear(128, 10)  # Binary classification output
-        self.relu = nn.ReLU()
-        # super(SimpleCNN, self).__init__()
-        # self.conv1 = nn.Conv2d(1, 8, kernel_size=3, padding=1)
-        # self.conv2 = nn.Conv2d(8, 16, kernel_size=3, padding=1)
-        # self.pool = nn.MaxPool2d(2, 2)
-        # self.fc1 = nn.Linear(3136, 128)
-        # self.fc2 = nn.Linear(128, 10)  # Binary classification output
-        # self.relu = nn.ReLU()
-
-    def forward(self, x):
-        x = self.relu(self.conv1(x))
-        x = self.pool(self.relu(self.conv2(x)))
-        x = torch.flatten(x, start_dim=1)
-        x = self.relu(self.fc1(x))
-        # x = self.sigmoid(self.fc2(x))  # Binary output
-        x = self.fc2(x)  # Binary output
-        
-        return x.squeeze()
-    
 
 
 
@@ -167,7 +159,7 @@ def bad_file_completion(path, timeout=5):
         
     return False
 
-def aggregate_models(data_dir, agg_dir, base_model_class, timeout=10):
+def aggregate_models(data_dir, agg_dir, base_model_class, timeout=5):
     """
     Aggregates model weights from multiple .pth files using Federated Averaging (FedAvg).
     
@@ -179,52 +171,59 @@ def aggregate_models(data_dir, agg_dir, base_model_class, timeout=10):
     Returns:
         aggregated_model (torch.nn.Module): The model with aggregated weights.
     """
+    
+    if len(os.listdir(agg_dir)) == 0:
+        return None
     stime = time()
     # Load the state dictionaries from all models
 
     while time() - stime < timeout:
         if os.path.exists(os.path.join(data_dir, ".DONE")):
             
-            agg_paths = [os.path.join(agg_dir, x) for x in os.listdir(agg_dir)]
+            try:
+                agg_paths = [os.path.join(agg_dir, x) for x in os.listdir(agg_dir)]
 
-            state_dicts = [torch.load(path, map_location=DEVICE, weights_only=False) for path in agg_paths]
-            
-            # state_dicts = []
-            
-            # # TODO maybe?
-            # for path in model_paths:
+                state_dicts = [torch.load(path, map_location=DEVICE, weights_only=False) for path in agg_paths]
                 
-            #     fp = open(path, 'r')
-            #     fcntl.flock(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)  # Attempt to acquire an exclusive lock
-            #     fcntl.flock(fp, fcntl.LOCK_UN)  # Release the lock if successful
-            #     state_dicts.append(torch.load(path, map_location=DEVICE, weights_only=False))
-            
-            
-            # Initialize the base model and its state_dict
-            base_model = base_model_class().to(DEVICE)
-            aggregated_state_dict = base_model.state_dict()
-            
-            # Initialize the aggregated weights as zero
-            for key in aggregated_state_dict.keys():
-                aggregated_state_dict[key] = torch.zeros_like(aggregated_state_dict[key], dtype=torch.float32)
-            
-            # Aggregate weights from all models
-            num_models = len(state_dicts)
-            for state_dict in state_dicts:
+                # state_dicts = []
+                
+                # # TODO maybe?
+                # for path in model_paths:
+                    
+                #     fp = open(path, 'r')
+                #     fcntl.flock(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)  # Attempt to acquire an exclusive lock
+                #     fcntl.flock(fp, fcntl.LOCK_UN)  # Release the lock if successful
+                #     state_dicts.append(torch.load(path, map_location=DEVICE, weights_only=False))
+                
+                
+                # Initialize the base model and its state_dict
+                base_model = base_model_class().to(DEVICE)
+                aggregated_state_dict = base_model.state_dict()
+                
+                # Initialize the aggregated weights as zero
                 for key in aggregated_state_dict.keys():
-                    aggregated_state_dict[key] += state_dict[key]
+                    aggregated_state_dict[key] = torch.zeros_like(aggregated_state_dict[key], dtype=torch.float32)
+                
+                # Aggregate weights from all models
+                num_models = len(state_dicts)
+                for state_dict in state_dicts:
+                    for key in aggregated_state_dict.keys():
+                        aggregated_state_dict[key] += state_dict[key]
+                
+                # Average the weights
+                for key in aggregated_state_dict.keys():
+                    aggregated_state_dict[key] /= num_models
+                
+                # Load the aggregated weights into the base model
+                base_model.load_state_dict(aggregated_state_dict)
+                os.remove(os.path.join(data_dir, ".DONE"))
+                return base_model
             
-            # Average the weights
-            for key in aggregated_state_dict.keys():
-                aggregated_state_dict[key] /= num_models
-            
-            # Load the aggregated weights into the base model
-            base_model.load_state_dict(aggregated_state_dict)
-            os.remove(os.path.join(data_dir, ".DONE"))
-            return base_model
+            except:
+                return None
         sleep(1)
-        print("TIMEOUT")
-        return None
+    print("TIMEOUT")
+    return None
 
 def collect_models(client, secret_key, num_models, timeout=10):
     """
@@ -257,25 +256,43 @@ def main():
     # lowkey could boot the go client at the start 
     # TODO this makes more sense with NLP tasks maybe
     
-    sleep(5)
     if len(sys.argv) > 2:
         dataset = JSONDataset(sys.argv[1])
         dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
         port = int(sys.argv[2])
         data_dir = f"{port}_data"
         agg_dir = os.path.join(data_dir, "agg")
-        os.mkdir(agg_dir)
-
-            
-        
-        
+        os.mkdir(agg_dir) 
     else:
         print("Usage: python prototype.py [data json] [port]")
         exit(1)
+    
+    # bood timeout
+    stime = time()
+    timeout = 15
+
+    while time() - stime < timeout:
+        if os.path.exists(os.path.join(data_dir, ".BOOT_DONE")):
+            os.remove(os.path.join(data_dir, ".BOOT_DONE"))
+            break
+        sleep(1)
+        
+    if time() - stime >= timeout:
+        print("BOOT TIMEOUT")
+        sys.exit(12)
+    
 
     criterion = nn.CrossEntropyLoss()
-    model = SimpleCNN()
     
+    # model = model = torch.load("model.pth")
+    # model = SimpleCNN() # TODO this should be loaded
+    model_class = get_model_arch("model_arch", os.path.join(data_dir, "model_arch.py"))
+    
+    model = model_class()
+    
+    # print(model)
+    # print(SimpleCNN)
+    # print(temp)
     # torch.save(model.state_dict(), f"my_model.pth")
     start = time() # agg every 30 seconds
     
@@ -299,10 +316,9 @@ def main():
 
                 # Secret key and number of models to collect
                 secret_key = "secret"
-                num_models = 3
 
                 # Call the function
-                collect_models(client, secret_key, num_models, timeout=10)
+                collect_models(client, secret_key, num_models=1, timeout=10)
                 # print(f"Models collected?: {models_collected}")
 
             """
@@ -321,7 +337,10 @@ def main():
             # print("models received")
             
             # agg_paths = random.sample(agg_paths, 3) # this is only bc we are not actaully sending models yet -- TODO remove eventually
-            model = aggregate_models(data_dir, agg_dir, SimpleCNN)
+            agg = aggregate_models(data_dir, agg_dir, model_class)
+            
+            if agg is not None:
+                model = agg
             
             start = time()
             
@@ -341,3 +360,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
+

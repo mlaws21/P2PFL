@@ -32,11 +32,7 @@ var (
 		"my_model.pth",
 		"path to local model file",
 	)
-	collected_models_path = flag.String(
-		"collected_models_path",
-		"./",
-		"directory path for collected models",
-	)
+	arch       = flag.String("arch", "", "Model arch")
 	ip_manager = IP_Manager{Peers: make(map[string]*pb.Peer)}
 )
 
@@ -124,7 +120,7 @@ func (s *server) GetModel(in *pb.GetModelRequest, stream pb.ModelService_GetMode
 }
 
 func (s *server) GetBootModel(in *pb.GetBootModelRequest, stream pb.ModelService_GetBootModelServer) error {
-	file, err := os.Open(*local_model_path) //TODO:
+	file, err := os.Open(fmt.Sprintf("%d_data/model_arch.py", *port))
 	if err != nil {
 		return err
 	}
@@ -166,7 +162,7 @@ func (s *server) GetPeerList(ctx context.Context, in *pb.GetPeerListRequest) (*p
 
 func getBootModel(ip string) error {
 
-	file, err := os.Create(fmt.Sprintf("%s/arch.pth", *collected_models_path))
+	file, err := os.Create(fmt.Sprintf("%d_data/model_arch.py", *port))
 	if err != nil {
 		return fmt.Errorf("failed to create file: %s", err.Error())
 	}
@@ -204,17 +200,16 @@ func getBootModel(ip string) error {
 	return nil
 }
 
-func Min(a, b int) int {
+func Min(a, b uint32) uint32 {
 	if a < b {
 		return a
 	}
 	return b
 }
 
-
 func getModel(id uint32, peer *pb.Peer) error {
 
-	file, err := os.Create(fmt.Sprintf("%s/model%d.pth", *collected_models_path, id))
+	file, err := os.Create(fmt.Sprintf("%d_data/agg/model%d.pth", *port, id))
 	if err != nil {
 		return fmt.Errorf("failed to create file: %s", err.Error())
 	}
@@ -254,7 +249,6 @@ func getModel(id uint32, peer *pb.Peer) error {
 
 func (s *server) CollectModels(_ context.Context, in *pb.CollectModelsRequest) (*pb.CollectModelsResponse, error) {
 
-	defer os.Create(fmt.Sprintf("%d_data/.DONE", *port))
 	if in.Key != *key {
 		return &pb.CollectModelsResponse{
 			Success: false,
@@ -273,7 +267,7 @@ func (s *server) CollectModels(_ context.Context, in *pb.CollectModelsRequest) (
 		}, errors.New("No models to aggregate")
 	}
 
-	for i := uint32(1); i <= in.Num; i++ {
+	for i := uint32(1); i <= Min(10, uint32(len(p)/2)); i++ {
 		chosen_peer := p[rand.Intn(len(p))]
 
 		err := getModel(i, chosen_peer)
@@ -281,6 +275,8 @@ func (s *server) CollectModels(_ context.Context, in *pb.CollectModelsRequest) (
 			return nil, err
 		}
 	}
+
+	os.Create(fmt.Sprintf("%d_data/.DONE", *port))
 
 	return &pb.CollectModelsResponse{
 		Success: true,
@@ -308,6 +304,30 @@ func runServer() {
 	}
 }
 
+func copyFile(source, destination string) error {
+	// Open the source file
+	srcFile, err := os.Open(source)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer srcFile.Close()
+
+	// Create the destination file
+	destFile, err := os.Create(destination)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer destFile.Close()
+
+	// Copy the content from source to destination
+	_, err = io.Copy(destFile, srcFile)
+	if err != nil {
+		return fmt.Errorf("failed to copy file: %w", err)
+	}
+
+	return nil
+}
+
 func boot() error {
 
 	// Remove the directory if it exists
@@ -332,11 +352,29 @@ func boot() error {
 		return err
 	}
 
+	if *arch != "" {
+		err = copyFile(*arch, fmt.Sprintf("%d_data/model_arch.py", *port))
+		if err != nil {
+			fmt.Println("Error moving file:", err)
+			return err
+		}
+	} else {
+		err = getBootModel(*boot_ip)
+		if err != nil {
+			fmt.Printf("Error collecting boot model: %v\n", err)
+			return err
+		}
+
+	}
+
+	defer os.Create(fmt.Sprintf("%d_data/.BOOT_DONE", *port))
+
 	conn, err := grpc.NewClient(*boot_ip, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
+
 	c := pb.NewModelServiceClient(conn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -372,14 +410,6 @@ func boot() error {
 	for _, v := range ip_manager.Peers {
 		fmt.Printf("%s:%d\n", v.Ip, v.Port)
 	}
-
-	err = getBootModel(*boot_ip)
-	if err != nil {
-		fmt.Printf("Error collecting boot model: %v\n", err)
-		return err
-	}
-
-	os.Create(fmt.Sprintf("%d_data/.BOOT_DONE", *port))
 
 	return nil
 }
