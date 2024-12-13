@@ -123,6 +123,35 @@ func (s *server) GetModel(in *pb.GetModelRequest, stream pb.ModelService_GetMode
 	return nil
 }
 
+func (s *server) GetBootModel(in *pb.GetBootModelRequest, stream pb.ModelService_GetBootModelServer) error {
+	file, err := os.Open(*local_model_path) //TODO:
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	buf := make([]byte, 1024*64)
+	batch_number := 0
+	for {
+		n, err := file.Read(buf)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		err = stream.Send(&pb.GetBootModelReply{Chunk: buf[:n]})
+		if err != nil {
+			return err
+		}
+		log.Printf("Sent - batch #%v - size - %v\n", batch_number, n)
+		batch_number += 1
+	}
+
+	return nil
+}
+
 func (s *server) GetPeerList(ctx context.Context, in *pb.GetPeerListRequest) (*pb.GetPeerListResponse, error) {
 	err := ip_manager.AddPeerFromContext(ctx, in.Port)
 	if err != nil {
@@ -135,8 +164,47 @@ func (s *server) GetPeerList(ctx context.Context, in *pb.GetPeerListRequest) (*p
 	}, nil
 }
 
-func getRandomModel(id uint32, peers []*pb.Peer) error {
-	chosen_peer := peers[rand.Intn(len(peers))]
+func getBootModel(ip string) error {
+
+	file, err := os.Create(fmt.Sprintf("%s/arch.pth", *collected_models_path))
+	if err != nil {
+		return fmt.Errorf("failed to create file: %s", err.Error())
+	}
+	defer file.Close()
+
+	conn, err := grpc.NewClient(ip, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("failed to connect: %s", err.Error())
+	}
+	defer conn.Close()
+
+	client := pb.NewModelServiceClient(conn)
+
+	stream, err := client.GetBootModel(context.Background(), &pb.GetBootModelRequest{})
+	if err != nil {
+		return fmt.Errorf("error getting model: %s", err.Error())
+	}
+
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to recieve chunk: %s", err.Error())
+		}
+
+		_, err = file.Write(chunk.Chunk)
+		if err != nil {
+			return fmt.Errorf("failed to write chunk: %s", err.Error())
+		}
+	}
+	log.Println("Model download complete!")
+
+	return nil
+}
+
+func getModel(id uint32, peer *pb.Peer) error {
 
 	file, err := os.Create(fmt.Sprintf("%s/model%d.pth", *collected_models_path, id))
 	if err != nil {
@@ -144,7 +212,7 @@ func getRandomModel(id uint32, peers []*pb.Peer) error {
 	}
 	defer file.Close()
 
-	conn, err := grpc.NewClient(fmt.Sprintf("%s:%d", chosen_peer.Ip, chosen_peer.Port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(fmt.Sprintf("%s:%d", peer.Ip, peer.Port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect: %s", err.Error())
 	}
@@ -192,7 +260,9 @@ func (s *server) CollectModels(_ context.Context, in *pb.CollectModelsRequest) (
 	}
 
 	for i := uint32(1); i <= in.Num; i++ {
-		err := getRandomModel(i, p)
+		chosen_peer := p[rand.Intn(len(p))]
+
+		err := getModel(i, chosen_peer)
 		if err != nil {
 			return nil, err
 		}
@@ -274,6 +344,15 @@ func boot() error {
 		fmt.Printf("Error creating directory: %v\n", err)
 		return err
 	}
+
+	err = getBootModel(*boot_ip)
+	if err != nil {
+		fmt.Printf("Error collecting boot model: %v\n", err)
+		return err
+	}
+
+	os.Create(fmt.Sprintf("%d_data/.BOOT_DONE", *port))
+
 	return nil
 }
 

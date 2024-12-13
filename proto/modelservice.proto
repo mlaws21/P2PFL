@@ -9,6 +9,7 @@ service ModelService {
     rpc GetModel (GetModelRequest) returns (stream GetModelReply) {}
     rpc GetPeerList (GetPeerListRequest) returns (GetPeerListResponse) {}
     rpc CollectModels (CollectModelsRequest) returns (CollectModelsResponse) {}
+    rpc GetBootModel (GetBootModelRequest) returns (stream GetBootModelReply) {}
 }
 
 message CollectModelsRequest {
@@ -25,6 +26,14 @@ message GetModelRequest {
 }
 
 message GetModelReply {
+    bytes chunk = 1;
+}
+
+message GetBootModelRequest {
+    uint32 port = 1;
+}
+
+message GetBootModelReply {
     bytes chunk = 1;
 }
 
