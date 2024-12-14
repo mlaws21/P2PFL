@@ -37,7 +37,7 @@ for i, (filename, group) in enumerate(df.groupby("File")):
     # Fit a line to the data
     coeffs = np.polyfit(group["Adjusted Time"], group["Accuracy"], 1)  # Linear fit
     fit_line = np.polyval(coeffs, group["Adjusted Time"])
-    plt.plot(group["Adjusted Time"], fit_line, linestyle="--", label=f"Client {i} Fit")
+    plt.plot(group["Adjusted Time"], fit_line, linestyle="--", label=f"Peer {i} Fit")
 
 # Fit a single line across all data points (combined)
 global_coeffs = np.polyfit(df["Adjusted Time"], df["Accuracy"], 1)
@@ -47,7 +47,7 @@ global_fit_line = np.polyval(global_coeffs, df["Adjusted Time"])
 plt.plot(df["Adjusted Time"], global_fit_line, "r-", linewidth=3, label="Average Fit")
 
 # Customize the plot
-plt.title("Accuracy vs. Time of Clients")
+plt.title("Accuracy of Peers vs. Time")
 plt.xlabel("Time (seconds)")
 plt.ylabel("Accuracy (%)")
 plt.legend()

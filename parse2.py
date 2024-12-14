@@ -30,13 +30,13 @@ df["Adjusted Time"] = df["Time"] - min_time
 # Plot the number of lines processed versus adjusted time
 plt.figure(figsize=(12, 8))
 
-for filename, group in df.groupby("File"):
-    plt.plot(group["Adjusted Time"], group["Line Number"], label=filename)
+for i, (filename, group) in enumerate(df.groupby("File")):
+    plt.plot(group["Adjusted Time"], group["Line Number"], label=f"Peer {i} Fit")
 
 # Customize the plot
-plt.title("Number of Lines Processed vs. Adjusted Time")
-plt.xlabel("Time (seconds, adjusted)")
-plt.ylabel("Number of Lines Processed")
-plt.legend(title="Output File")
+plt.title("Number of Training Cycles Over Time")
+plt.xlabel("Time (seconds)")
+plt.ylabel("Number of Training Cycles")
+plt.legend()
 plt.grid(True)
 plt.show()
