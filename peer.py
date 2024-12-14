@@ -140,7 +140,7 @@ def evaluate(model, dataloader, criterion):
     avg_loss = total_loss / len(dataloader)
     accuracy = correct / total
 
-    return f"Validation Accuracy: {accuracy:.4f}"
+    return accuracy
     # return {"loss": avg_loss, "accuracy": accuracy}
 
 def bad_file_completion(path, timeout=5):
@@ -347,7 +347,12 @@ def main():
         else:
             model = train_model(dataloader, model, criterion, epochs=1)
         
-        print(evaluate(model, test_dataloader, criterion))
+        accuracy = evaluate(model, test_dataloader, criterion)
+        
+        print(f"Validation Accuracy: {accuracy:.4f}")
+        
+        with open(f"outputs/{port}_output.txt", "a+") as file:
+            file.write(f"{accuracy}, {time()}\n")
 
         temp_path = os.path.join(data_dir, "my_model.tmp")
         try: 

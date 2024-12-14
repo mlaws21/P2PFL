@@ -1,12 +1,82 @@
 # python run.py 8000 localhost:8000 model_arch.py
-# python run.py 8001 localhost:8000 model_arch.py
-# python run.py 8002 localhost:8001 model_arch.py
+# python run.py 8001 localhost:8000
+# python run.py 8002 localhost:8001
 
 
 import sys
 import subprocess
 import re
 
+def run_add(port_arg, boot_arg, arch_arg):
+    
+    # Validate that the port is a valid number
+    if not re.match(r'^\d+$', port_arg):
+        print("Error: PORT must be a numeric value.")
+        sys.exit(1)
+
+    # Format the port and paths
+    port_number = port_arg#f"800{port_arg}"
+    local_model_path = f"./{port_number}_data/my_model.pth"
+    collected_models_path = f"./{port_number}_data/agg"
+    client_data_path = f"./client_data/{port_arg}.json"
+
+    # Commands
+    go_cmd = [
+        "go", "run", "modelservice_server/modelservice_server.go",
+        "-port", port_number,
+        "-boo_ip", boot_arg,
+        "-local_model_path", local_model_path,
+        "-arch", arch_arg
+    ]
+    py_cmd = ["python", "peer.py", client_data_path, port_number]
+
+    try:
+        # Run the commands
+        go_process = subprocess.Popen(go_cmd)
+        py_process = subprocess.Popen(py_cmd)
+
+        # Wait for both processes to complete
+        go_process.wait()
+        py_process.wait()
+        
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        print("Script execution complete.")
+
+def run_recieve(port_arg, boot_arg):
+   # Validate that the port is a valid number
+    if not re.match(r'^\d+$', port_arg):
+        print("Error: PORT must be a numeric value.")
+        sys.exit(1)
+
+    # Format the port and paths
+    port_number = port_arg#f"800{port_arg}"
+    local_model_path = f"./{port_number}_data/my_model.pth"
+    collected_models_path = f"./{port_number}_data/agg"
+    client_data_path = f"./client_data/{port_arg}.json"
+
+    # Commands
+    go_cmd = [
+        "go", "run", "modelservice_server/modelservice_server.go",
+        "-port", port_number,
+        "-boo_ip", boot_arg,
+        "-local_model_path", local_model_path,
+    ]
+    py_cmd = ["python", "peer.py", client_data_path, port_number]
+    
+    try:
+        go_process = subprocess.Popen(go_cmd)
+        py_process = subprocess.Popen(py_cmd)
+        
+        go_process.wait()
+        py_process.wait()
+    
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        print("Script execution complete.")
+    
 def main():
     # Check if a port argument is provided
     if len(sys.argv) < 3:
