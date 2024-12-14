@@ -91,6 +91,10 @@ func (ip_manager *IP_Manager) GetPeerList() map[string]*pb.Peer {
 
 // TODO: needs a way of better handling updates with python client
 func (s *server) GetModel(in *pb.GetModelRequest, stream pb.ModelService_GetModelServer) error {
+	if err := ip_manager.AddPeerFromContext(stream.Context(), in.Port); err != nil {
+		log.Printf("Warning: Failed to add peer from context: %v", err)
+	}
+
 	file, err := os.Open(*local_model_path)
 	if err != nil {
 		return err
